@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -19,17 +20,19 @@ var emoji_array []string
 var spell_type []string
 var spell_preposition []string
 var spell_subject []string
+var options map[string]string
 
 func main() {
 	emoji_array = LoadJson("emoji.json")
 	spell_type = LoadJson("type.json")
 	spell_preposition = LoadJson("preposition.json")
 	spell_subject = LoadJson("subject.json")
+	options = LoadOptions("options.json")
 
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	//fmt.Println(GenerateSpell())
-	Server()
+	spell := GenerateSpell()
+	Post(spell)
 }
 
 func GenerateSpell() string {
@@ -48,7 +51,6 @@ func GenerateSpell() string {
 		spell.WriteString(emoji.Sprint(RandomArg(emoji_array)))
 	}
 	return strings.ToUpper(spell.String())
-	//return spell.String()
 }
 
 func Server() {
@@ -78,6 +80,42 @@ func LoadJson(filename string) []string {
 	return parsed
 }
 
+func LoadOptions(filename string) map[string]string {
+	var parsed map[string]string
+	file, e := ioutil.ReadFile(filename)
+	if e != nil {
+		fmt.Printf("File Error: [%v]\n", e)
+	}
+	e = json.Unmarshal(file, &parsed)
+	if e != nil {
+		fmt.Printf("File Error: [%v]\n", e)
+	}
+
+	return parsed
+}
+
 func RandomArg(subject []string) string {
 	return subject[rand.Intn(len(subject)-1)]
+}
+
+func Post(spell string) {
+	data := url.Values{}
+	data.Set("status", spell)
+	resource := "/api/v1/statuses"
+	u, _ := url.ParseRequestURI(options["instance"])
+	u.Path = resource
+	u.RawQuery = data.Encode()
+	urlStr := fmt.Sprintf("%v", u)
+	req, err := http.NewRequest("POST", urlStr, nil)
+	if err != nil {
+		panic(fmt.Sprintf("ERROR: %v", err))
+	}
+	req.Header.Add("Authorization", "Bearer "+options["key"])
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(fmt.Sprintf("ERROR with req: %v\n", err))
+	}
+	resp.Body.Close()
 }
